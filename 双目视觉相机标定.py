@@ -63,6 +63,7 @@ ret, M1, d1, M2, d2, R, T, E, F = cv2.stereoCalibrate(
     obj_points, img_points_l, img_points_r, intrinsicsM_l, distortCoef_l, intrinsicsM_r, distortCoef_r, size, criteria=stereocalib_criteria, flags=0
 )
 
+'''
 print('IntrinsicM_l\n', M1)
 print('dist_l\n', d1)
 print('IntrinsicM_r\n', M2)
@@ -71,3 +72,52 @@ print('R\n', R)
 print('T\n', T)
 print('E\n', E)
 print('F\n', F)
+'''
+
+# 第 14 题
+# 使用 Bouguet 标定算法
+R1, R2, P1, P2, Q ,validPixROI1, validPixROI2 = cv2.stereoRectify(M1, d1, M2, d2, size, R, T)
+
+
+# 校正映射
+
+# 对左边相机图像
+map1_l, map2_l = cv2.initUndistortRectifyMap(M1, d1, R1, P1, size, cv2.CV_16SC2)
+
+# 对右边相机图像
+map1_r, map2_r = cv2.initUndistortRectifyMap(M2, d2, R2, P2, size, cv2.CV_16SC2)
+
+left01 = cv2.imread('left01.jpg')
+right01 = cv2.imread('right01.jpg')
+# 重映射
+left01_re = cv2.remap(left01, map1_l, map2_l, cv2.INTER_LINEAR)
+right01_re = cv2.remap(right01, map1_r, map2_r, cv2.INTER_LINEAR)
+# 写入图片
+cv2.imwrite("left01_re.jpg", left01_re)
+cv2.imwrite("right01_re.jpg", right01_re)
+
+
+# 第 17 题
+# 计算视差图
+for i in [4, 8, 16]:
+    for j in [1, 3, 5]:
+        blockSize = i
+        img_channels = j
+        stereo = cv2.StereoSGBM_create(
+            minDisparity = 1,
+            numDisparities = 64,
+            blockSize = blockSize,
+            P1 = 8 * img_channels * blockSize * blockSize,
+            P2 = 32 * img_channels * blockSize * blockSize,
+            disp12MaxDiff = -1,
+            preFilterCap = 1,
+            uniquenessRatio = 10,
+            speckleWindowSize = 100,
+            speckleRange = 100,
+            mode = cv2.STEREO_SGBM_MODE_HH
+        )
+
+        disp = stereo.compute(left01_re, right01_re)
+        # 除以 16 得到真实视差图
+        disp = np.divide(disp.astype(np.float32), 16.)    
+        cv2.imwrite("disp" + str(i) + str(j) + ".jpg", disp)
