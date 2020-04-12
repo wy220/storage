@@ -1,5 +1,6 @@
 // 运行会报错，应该是我对数据集的使用有问题，在remap()之后，新的图像已经无法显示，自然就不能stereoBM::compute()
-
+// 经阅读一些基于深度学习的立体匹配算法论文之后，我认为数据集给出的图片是经过立体校正的，不需要再进行重映射remap()，应该可以直接计算视差图
+// 之后我修改代码，成功运行，但视差图结果肉眼可见的极差···我就没再使用代码进行误差计算
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
@@ -19,10 +20,12 @@ using namespace cv;
 using namespace cv::cuda;
 using namespace std;
 
-cv::Ptr<cv::StereoBM> bm = cv::StereoBM::create(64, 11);
+//cv::Ptr<cv::StereoBM> bm = cv::StereoBM::create(16, 9);
 
-//Ptr<cv::StereoBM> GPU_bm = cuda::StereoBM::create(16, 9);
+Ptr<cv::StereoBM> GPU_bm = cuda::StereoBM::create(16, 9);
 
+
+// 之前的写法
 void KITTI_test() {
 	float Size_rect[1][2];
 	float K_left[3][3];
@@ -179,11 +182,47 @@ void KITTI_test() {
 
 }
 
+// 直接使用KITTI的图片进行计算视差图
+void CUDA_BM() {
+	String Filename_l = "D:/data_scene_flow/training/image_2/000000_10.png";
+	String Filename_r = "D:/data_scene_flow/training/image_2/000000_11.png";
+
+	Mat left01 = imread(Filename_l);
+	Mat right01 = imread(Filename_r);
+	GpuMat GPU_left01(left01);
+	GpuMat GPU_right01(right01);
+	
+	Mat disp;
+
+	GPU_bm->setPreFilterType(cuda::StereoBM::PREFILTER_NORMALIZED_RESPONSE);
+	GPU_bm->setPreFilterSize(9);
+	GPU_bm->setPreFilterCap(31);
+	GPU_bm->setBlockSize(21);
+	GPU_bm->setMinDisparity(0);
+	GPU_bm->setNumDisparities(64);
+	GPU_bm->setTextureThreshold(10);
+	GPU_bm->setUniquenessRatio(5);
+	GPU_bm->setSpeckleWindowSize(100);
+	GPU_bm->setSpeckleRange(32);
+
+	cuda::cvtColor(GPU_left01, GPU_left01, COLOR_BGR2GRAY);
+	cuda::cvtColor(GPU_right01, GPU_right01, COLOR_BGR2GRAY);
+	GPU_left01.download(left01);
+	GPU_right01.download(right01);
+	GPU_bm->compute(left01, right01, disp);    
+
+	disp = disp.colRange(80, re_left.cols);
+	disp.convertTo(disp, CV_32F, 1.0 / 16);
+	imshow("GPU_disp", disp);
+	waitKey(0);
+}
+
 
 int main(int argc, char** argv) {
 	clock_t start, finish;
 	start = clock();
-	KITTI_test();
+	//KITTI_test();
+	CUDA_BM();
 	finish = clock();
 	cout << "运行时间:" << (double)(finish - start) / CLOCKS_PER_SEC << endl;
 	
